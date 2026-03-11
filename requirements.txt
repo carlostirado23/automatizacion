@@ -1,1 +1,6 @@
-requirements.txt
+Flask
+gunicorn
+pdfplumber
+pandas
+openpyxl
+Werkzeug
