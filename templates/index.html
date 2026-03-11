@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Procesador de Facturas</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+
+    <body class="bg-slate-100 min-h-screen flex items-center justify-center p-6">
+        <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8">
+            <!-- Header -->
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-slate-800">📄 Procesador de Facturas PDF</h1>
+                <p class="text-slate-500 mt-2">Sube tus facturas y descarga el consolidado automáticamente</p>
+            </div>
+
+            <!-- Upload Area -->
+            <div class="space-y-6">
+                <label class="block">
+                    <div
+                        class="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:border-blue-500 transition cursor-pointer">
+                        <div class="text-5xl mb-4">⬆️</div>
+
+                        <p class="text-slate-700 font-medium">Arrastra tus PDFs aquí</p>
+
+                        <p class="text-sm text-slate-500 mt-1">o haz clic para seleccionarlos</p>
+
+                        <input type="file" multiple accept=".pdf" class="hidden" id="inputPDF" />
+                    </div>
+                </label>
+
+                <!-- Lista dinámica -->
+                <div id="listaArchivos" class="space-y-2"></div>
+
+                <!-- BOTÓN ÚNICO -->
+                <button
+                    onclick="subirYDescargar()"
+                    class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-6 rounded-xl transition">
+                    ⬇️ Descargar Excel
+                </button>
+            </div>
+
+            <div class="text-center text-xs text-slate-400 mt-8">Automatización de facturación</div>
+        </div>
+
+        <script>
+            const input = document.getElementById("inputPDF");
+            const lista = document.getElementById("listaArchivos");
+
+            let archivosAcumulados = [];
+
+            // ==============================
+            // LISTAR ARCHIVOS
+            // ==============================
+            input.addEventListener("change", function () {
+                for (let i = 0; i < input.files.length; i++) {
+                    const archivo = input.files[i];
+
+                    if (!archivosAcumulados.find((a) => a.name === archivo.name)) {
+                        archivosAcumulados.push(archivo);
+                        agregarALista(archivo.name);
+                    }
+                }
+            });
+
+            function agregarALista(nombre) {
+                const item = document.createElement("div");
+                item.className =
+                    "flex justify-between items-center bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm";
+                item.innerHTML = `
+        <span class="truncate">📄 ${nombre}</span>
+        <span class="estado bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs font-semibold">
+            Pendiente
+        </span>
+    `;
+                lista.appendChild(item);
+            }
+
+            // ==============================
+            // CAMBIAR ESTADOS
+            // ==============================
+            function marcarProcesados() {
+                const estados = document.querySelectorAll(".estado");
+                estados.forEach((e) => {
+                    e.classList.remove("bg-yellow-100", "text-yellow-700");
+                    e.classList.add("bg-emerald-100", "text-emerald-700");
+                    e.textContent = "Procesado";
+                });
+            }
+
+            // ==============================
+            // SUBIR Y DESCARGAR
+            // ==============================
+            async function subirYDescargar() {
+                if (archivosAcumulados.length === 0) {
+                    alert("Selecciona al menos un PDF");
+                    return;
+                }
+
+                const formData = new FormData();
+                archivosAcumulados.forEach((a) => formData.append("pdfs", a));
+
+                // Subir PDFs
+                await fetch("/subir", {
+                    method: "POST",
+                    body: formData,
+                });
+
+                // Cambiar estados visuales
+                marcarProcesados();
+
+                // Descargar Excel
+                window.location.href = "/descargar";
+            }
+        </script>
+    </body>
+</html>
