@@ -6,60 +6,104 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
-
     <body class="bg-slate-100 min-h-screen flex items-center justify-center p-6">
         <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8">
-            <!-- Header -->
             <div class="text-center mb-8">
-                <h1 class="text-3xl font-bold text-slate-800">📄 Procesador de Facturas PDF</h1>
-                <p class="text-slate-500 mt-2">Sube tus facturas y descarga el consolidado automáticamente</p>
+                <h1 class="text-3xl font-bold text-slate-800">📄 Procesador de Facturas</h1>
+                <p class="text-slate-500 mt-2">Automatización Documental (PDF→Excel) o RIPS (ZIP→RIPS)</p>
             </div>
+            <!-- Selector de modalidad -->
+            <label class="block mb-6 font-medium"
+                >Modo:
+                <select id="tipoAutomatizacion" class="mt-1 p-2 border rounded w-full">
+                    <option value="documental">Documental (PDF→Excel)</option>
+                    <option value="rips">RIPS (ZIP→RIPS)</option>
+                </select>
+            </label>
 
-            <!-- Upload Area -->
-            <div class="space-y-6">
-                <label class="block">
+            <!-- Área de carga PDFs (Documental) -->
+            <div id="pdfArea">
+                <label class="block mb-4">
                     <div
                         class="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:border-blue-500 transition cursor-pointer">
                         <div class="text-5xl mb-4">⬆️</div>
-
                         <p class="text-slate-700 font-medium">Arrastra tus PDFs aquí</p>
-
                         <p class="text-sm text-slate-500 mt-1">o haz clic para seleccionarlos</p>
-
-                        <input type="file" multiple accept=".pdf" class="hidden" id="inputPDF" />
+                        <input
+                            id="inputPDF"
+                            type="file"
+                            multiple
+                            accept=".pdf"
+                            class="hidden"
+                            aria-label="Subir archivos PDF" />
                     </div>
                 </label>
-
-                <!-- Lista dinámica -->
+                <!-- Lista dinámica de archivos -->
                 <div id="listaArchivos" class="space-y-2"></div>
-
-                <!-- BOTÓN ÚNICO -->
-                <button
-                    onclick="subirYDescargar()"
-                    class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-6 rounded-xl transition">
-                    ⬇️ Descargar Excel
-                </button>
             </div>
 
-            <div class="text-center text-xs text-slate-400 mt-8">Automatización de facturación</div>
+            <!-- Área de carga ZIP y NIT (RIPS) -->
+            <div id="zipArea" class="hidden mb-4">
+                <label class="block mb-4">
+                    <div
+                        class="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:border-blue-500 transition cursor-pointer">
+                        <div class="text-5xl mb-4">🗂️</div>
+                        <p class="text-slate-700 font-medium">Arrastra tu archivo ZIP aquí</p>
+                        <p class="text-sm text-slate-500 mt-1">o haz clic para seleccionarlo</p>
+                        <input id="inputZIP" type="file" accept=".zip" class="hidden" aria-label="Subir archivo ZIP" />
+                    </div>
+                </label>
+                <input
+                    id="inputNIT"
+                    type="text"
+                    name="nit"
+                    placeholder="Ingresar NIT (ej. 812001219)"
+                    class="mt-2 w-full p-2 border rounded"
+                    aria-label="Número de Identificación Tributaria" />
+            </div>
+
+            <!-- Botón Único -->
+            <button
+                type="button"
+                onclick="subirYDescargar()"
+                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition">
+                ⬇️ Descargar
+            </button>
+
+            <div class="text-center text-xs text-slate-400 mt-6">Automatización de facturación</div>
         </div>
 
         <script>
-            const input = document.getElementById("inputPDF");
+            const tipo = document.getElementById("tipoAutomatizacion");
+            const pdfArea = document.getElementById("pdfArea");
+            const zipArea = document.getElementById("zipArea");
+            const inputPDF = document.getElementById("inputPDF");
+            const inputZIP = document.getElementById("inputZIP");
+            const inputNIT = document.getElementById("inputNIT");
             const lista = document.getElementById("listaArchivos");
-
             let archivosAcumulados = [];
 
-            // ==============================
-            // LISTAR ARCHIVOS
-            // ==============================
-            input.addEventListener("change", function () {
-                for (let i = 0; i < input.files.length; i++) {
-                    const archivo = input.files[i];
+            // Mostrar/ocultar áreas según la modalidad seleccionada
+            tipo.addEventListener("change", () => {
+                if (tipo.value === "rips") {
+                    pdfArea.classList.add("hidden");
+                    zipArea.classList.remove("hidden");
+                    lista.innerHTML = "";
+                    archivosAcumulados = [];
+                } else {
+                    zipArea.classList.add("hidden");
+                    pdfArea.classList.remove("hidden");
+                    lista.innerHTML = "";
+                    archivosAcumulados = [];
+                }
+            });
 
-                    if (!archivosAcumulados.find((a) => a.name === archivo.name)) {
-                        archivosAcumulados.push(archivo);
-                        agregarALista(archivo.name);
+            // Lista archivos arrastrados o seleccionados
+            inputPDF.addEventListener("change", function () {
+                for (const file of inputPDF.files) {
+                    if (!archivosAcumulados.find((a) => a.name === file.name)) {
+                        archivosAcumulados.push(file);
+                        agregarALista(file.name);
                     }
                 }
             });
@@ -69,17 +113,13 @@
                 item.className =
                     "flex justify-between items-center bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm";
                 item.innerHTML = `
-        <span class="truncate">📄 ${nombre}</span>
-        <span class="estado bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs font-semibold">
-            Pendiente
-        </span>
-    `;
+            <span class="truncate">📄 ${nombre}</span>
+            <span class="estado bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs font-semibold">
+                Pendiente
+            </span>`;
                 lista.appendChild(item);
             }
 
-            // ==============================
-            // CAMBIAR ESTADOS
-            // ==============================
             function marcarProcesados() {
                 const estados = document.querySelectorAll(".estado");
                 estados.forEach((e) => {
@@ -89,29 +129,35 @@
                 });
             }
 
-            // ==============================
-            // SUBIR Y DESCARGAR
-            // ==============================
+            // Enviar datos y redirigir según modalidad
             async function subirYDescargar() {
-                if (archivosAcumulados.length === 0) {
-                    alert("Selecciona al menos un PDF");
-                    return;
+                if (tipo.value === "documental") {
+                    if (archivosAcumulados.length === 0) {
+                        alert("Selecciona al menos un PDF.");
+                        return;
+                    }
+                    const formData = new FormData();
+                    archivosAcumulados.forEach((f) => formData.append("pdfs", f));
+                    await fetch("/subir", { method: "POST", body: formData });
+                    marcarProcesados();
+                    window.location.href = "/descargar";
+                } else {
+                    // RIPS
+                    if (!inputZIP.files.length) {
+                        alert("Selecciona un archivo ZIP.");
+                        return;
+                    }
+                    if (!inputNIT.value.trim()) {
+                        alert("Ingresa el NIT.");
+                        return;
+                    }
+                    const formData = new FormData();
+                    formData.append("zipfile", inputZIP.files[0]);
+                    formData.append("nit", inputNIT.value.trim());
+                    await fetch("/subir_rips", { method: "POST", body: formData });
+                    alert("Procesando RIPS. Se iniciará la descarga...");
+                    window.location.href = "/descargar_rips?nit=" + encodeURIComponent(inputNIT.value.trim());
                 }
-
-                const formData = new FormData();
-                archivosAcumulados.forEach((a) => formData.append("pdfs", a));
-
-                // Subir PDFs
-                await fetch("/subir", {
-                    method: "POST",
-                    body: formData,
-                });
-
-                // Cambiar estados visuales
-                marcarProcesados();
-
-                // Descargar Excel
-                window.location.href = "/descargar";
             }
         </script>
     </body>
