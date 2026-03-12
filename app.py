@@ -7,29 +7,20 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
-TEMP_FOLDER = "temp"
-OUTPUT_FOLDER = "outputs"
-
-EXCEL_FILE = os.path.join(OUTPUT_FOLDER, "resultados.xlsx")
-RIPS_ZIP = os.path.join(OUTPUT_FOLDER, "RIPS_procesado.zip")
+EXCEL_FILE = "resultados.xlsx"
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(TEMP_FOLDER, exist_ok=True)
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# =========================================================
-# ================= PDF → EXCEL ===========================
-# =========================================================
+# =====================================================
+# ================= PDF → EXCEL =======================
+# =====================================================
 
 def extraer_datos_pdf(ruta_pdf):
     with pdfplumber.open(ruta_pdf) as pdf:
         texto = ""
         for pagina in pdf.pages:
-            contenido = pagina.extract_text()
-            if contenido:
-                texto += contenido + "\n"
+            texto += pagina.extract_text() + "\n"
 
     entidad = re.search(r'Entidad:\s*(.+)', texto)
     if entidad:
@@ -57,10 +48,8 @@ def procesar_pdfs():
     for nombre in os.listdir(UPLOAD_FOLDER):
         if nombre.lower().endswith(".pdf"):
             ruta = os.path.join(UPLOAD_FOLDER, nombre)
-
             entidad, total = extraer_datos_pdf(ruta)
             numero_factura = extraer_numero_factura(nombre)
-
             filas.append([numero_factura, entidad, total])
 
     if filas:
@@ -77,74 +66,78 @@ def limpiar_pdf_excel():
             os.remove(EXCEL_FILE)
 
         for archivo in os.listdir(UPLOAD_FOLDER):
-            ruta = os.path.join(UPLOAD_FOLDER, archivo)
-            if os.path.isfile(ruta):
-                os.remove(ruta)
-
+            if archivo.lower().endswith(".pdf"):
+                os.remove(os.path.join(UPLOAD_FOLDER, archivo))
     except Exception as e:
         print("Error limpiando PDF/Excel:", e)
 
 
-# =========================================================
-# ================= ZIP → RIPS ============================
-# =========================================================
+# =====================================================
+# ================= ZIP → RIPS ========================
+# =====================================================
 
 def procesar_zip_rips(path_zip, nit):
-    temp_dir = os.path.join(TEMP_FOLDER, "rips_extract")
-    rips_out = os.path.join(TEMP_FOLDER, "RIPS_out")
+    temp_dir = os.path.join(UPLOAD_FOLDER, "temp_rips")
+    rips_root = os.path.join(UPLOAD_FOLDER, "RIPS")
 
     os.makedirs(temp_dir, exist_ok=True)
-    os.makedirs(rips_out, exist_ok=True)
+    os.makedirs(rips_root, exist_ok=True)
 
-    # 1️⃣ Extraer ZIP
+    # 1️⃣ Descomprimir ZIP
     with zipfile.ZipFile(path_zip, 'r') as z:
         z.extractall(temp_dir)
 
     # 2️⃣ Recorrer carpetas FEH
     for feh in os.listdir(temp_dir):
-        ruta_carpeta = os.path.join(temp_dir, feh)
+        carpeta_feh = os.path.join(temp_dir, feh)
 
-        if os.path.isdir(ruta_carpeta) and feh.startswith("FEH"):
+        if os.path.isdir(carpeta_feh) and feh.startswith("FEH"):
+            carpeta_destino = os.path.join(rips_root, feh)
+            os.makedirs(carpeta_destino, exist_ok=True)
 
-            for archivo in os.listdir(ruta_carpeta):
-                origen = os.path.join(ruta_carpeta, archivo)
+            for archivo in os.listdir(carpeta_feh):
+                origen = os.path.join(carpeta_feh, archivo)
 
+                # TXT CUV
                 if archivo.startswith("ResultadosMSPS") and archivo.endswith("_CUV.txt"):
-                    nuevo = f"{nit}_{feh}_CUV.txt"
-                    shutil.copy(origen, os.path.join(rips_out, nuevo))
+                    nuevo_nombre = f"{nit}_{feh}_CUV.txt"
+                    shutil.copy(origen, os.path.join(carpeta_destino, nuevo_nombre))
 
+                # JSON RIPS
                 elif archivo.endswith(".json"):
-                    nuevo = f"{nit}_{feh}_RIPS.json"
-                    shutil.copy(origen, os.path.join(rips_out, nuevo))
+                    nuevo_nombre = f"{nit}_{feh}_RIPS.json"
+                    shutil.copy(origen, os.path.join(carpeta_destino, nuevo_nombre))
 
     # 3️⃣ Crear ZIP final
-    with zipfile.ZipFile(RIPS_ZIP, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for archivo in os.listdir(rips_out):
-            ruta_archivo = os.path.join(rips_out, archivo)
-            zf.write(ruta_archivo, arcname=archivo)
+    zip_final = os.path.join(UPLOAD_FOLDER, "RIPS_procesado.zip")
 
-    return temp_dir, rips_out
+    with zipfile.ZipFile(zip_final, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(rips_root):
+            for file in files:
+                ruta_archivo = os.path.join(root, file)
+                arcname = os.path.relpath(ruta_archivo, UPLOAD_FOLDER)
+                zf.write(ruta_archivo, arcname)
+
+    return zip_final, temp_dir, rips_root
 
 
-def limpiar_rips(path_zip, temp_dir, rips_out):
+def limpiar_rips(path_zip, zip_final, temp_dir, rips_root):
     time.sleep(5)
     try:
-        if os.path.exists(path_zip):
-            os.remove(path_zip)
-
-        if os.path.exists(RIPS_ZIP):
-            os.remove(RIPS_ZIP)
+        for p in [path_zip, zip_final]:
+            if os.path.exists(p):
+                os.remove(p)
 
         shutil.rmtree(temp_dir, ignore_errors=True)
-        shutil.rmtree(rips_out, ignore_errors=True)
+        shutil.rmtree(rips_root, ignore_errors=True)
 
     except Exception as e:
         print("Error limpiando RIPS:", e)
 
 
-# =========================================================
-# ==================== RUTAS ==============================
-# =========================================================
+# =====================================================
+# ===================== RUTAS =========================
+# =====================================================
 
 @app.route("/")
 def index():
@@ -189,34 +182,35 @@ def subir_rips():
     ruta_zip = os.path.join(UPLOAD_FOLDER, nombre)
     archivo_zip.save(ruta_zip)
 
-    # procesar de una vez
-    temp_dir, rips_out = procesar_zip_rips(ruta_zip, nit)
+    # Procesar inmediatamente
+    zip_final, temp_dir, rips_root = procesar_zip_rips(ruta_zip, nit)
 
-    # guardar rutas para limpieza
-    app.config["RUTA_ZIP_ORIGINAL"] = ruta_zip
-    app.config["RUTA_TEMP"] = temp_dir
-    app.config["RUTA_RIPS_OUT"] = rips_out
+    # Guardar rutas para limpiar luego
+    app.config["RIPS_DATA"] = (ruta_zip, zip_final, temp_dir, rips_root)
 
     return ("", 204)
 
 
 @app.route("/descargar_rips")
 def descargar_rips():
-    if os.path.exists(RIPS_ZIP):
-        resp = send_file(RIPS_ZIP, as_attachment=True)
+    data = app.config.get("RIPS_DATA")
 
-        Thread(target=limpiar_rips, args=(
-            app.config.get("RUTA_ZIP_ORIGINAL"),
-            app.config.get("RUTA_TEMP"),
-            app.config.get("RUTA_RIPS_OUT")
-        )).start()
+    if not data:
+        return "No hay archivo para descargar."
 
+    ruta_zip, zip_final, temp_dir, rips_root = data
+
+    if os.path.exists(zip_final):
+        resp = send_file(zip_final, as_attachment=True)
+        Thread(target=limpiar_rips, args=(ruta_zip, zip_final, temp_dir, rips_root)).start()
         return resp
 
     return "No hay archivo para descargar."
 
 
-# =========================================================
+# =====================================================
+# ===================== RUN ===========================
+# =====================================================
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False)
+    app.run(debug=True)
